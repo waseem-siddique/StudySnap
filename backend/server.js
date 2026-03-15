@@ -46,7 +46,7 @@ app.use('/api/activities', require('./routes/activities'));
 app.use(express.static(path.join(__dirname, '../frontend/dist')));
 
 // Catch-all: serve frontend's index.html for any non-API route (for client-side routing)
-app.get('*', (req, res) => {
+app.get('/{*any}', (req, res) =>{
   res.sendFile(path.join(__dirname, '../frontend/dist/index.html'));
 });
 
