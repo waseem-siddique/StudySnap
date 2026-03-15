@@ -206,14 +206,16 @@ router.post('/admin/login', async (req, res) => {
 router.get('/check-user/:mobile', async (req, res) => {
   try {
     const { mobile } = req.params;
+    console.log(`Checking user for mobile: ${mobile}`);
     const user = await User.findOne({ mobile }).select('email username');
+    console.log('User found:', user);
     if (user) {
       res.json({ exists: true, email: user.email, username: user.username });
     } else {
       res.json({ exists: false });
     }
   } catch (err) {
-    console.error(err);
+    console.error('❌ Error in /check-user:', err); // This will show in Render logs
     res.status(500).json({ error: 'Server error' });
   }
 });
