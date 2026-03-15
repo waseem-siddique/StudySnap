@@ -2,168 +2,219 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import ClickSpark from '../../components/ClickSpark';
 
 export default function ManageUsers() {
   const { user } = useAuth();
   const [users, setUsers] = useState([]);
-  const [professors, setProfessors] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('students'); // 'students' or 'professors'
-  const [editingUser, setEditingUser] = useState(null);
-  const [editForm, setEditForm] = useState({ name: '', email: '', role: '' });
+  const [error, setError] = useState('');
+  const [colleges, setColleges] = useState([]);
+  const [courses, setCourses] = useState([]);
+  const [selectedCollege, setSelectedCollege] = useState('');
+  const [selectedCourse, setSelectedCourse] = useState('');
+
+  // Notification modal state
+  const [showNotificationModal, setShowNotificationModal] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState(null);
+  const [notificationMessage, setNotificationMessage] = useState('');
+  const [sending, setSending] = useState(false);
 
   useEffect(() => {
-    fetchStudents();
-    fetchProfessors();
+    fetchColleges();
+    fetchUsers();
   }, []);
 
-  const fetchStudents = async () => {
+  useEffect(() => {
+    if (selectedCollege) {
+      fetchCourses(selectedCollege);
+    } else {
+      setCourses([]);
+      setSelectedCourse('');
+    }
+  }, [selectedCollege]);
+
+  useEffect(() => {
+    fetchUsers();
+  }, [selectedCollege, selectedCourse]);
+
+  const fetchColleges = async () => {
     try {
-      const res = await axios.get('http://localhost:5000/api/admin/users');
+      const token = localStorage.getItem('token');
+      const res = await axios.get('http://localhost:5000/api/admin/colleges', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setColleges(res.data);
+    } catch (err) {
+      console.error('Failed to fetch colleges', err);
+    }
+  };
+
+  const fetchCourses = async (collegeId) => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await axios.get(`http://localhost:5000/api/admin/courses?college=${collegeId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setCourses(res.data);
+    } catch (err) {
+      console.error('Failed to fetch courses', err);
+    }
+  };
+
+  const fetchUsers = async () => {
+    setLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      let url = 'http://localhost:5000/api/admin/users';
+      const params = new URLSearchParams();
+      if (selectedCollege) params.append('college', selectedCollege);
+      if (selectedCourse) params.append('course', selectedCourse);
+      if (params.toString()) url += '?' + params.toString();
+
+      const res = await axios.get(url, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       setUsers(res.data);
     } catch (err) {
-      console.error('Failed to fetch students');
+      setError('Failed to load students');
+      console.error(err);
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchProfessors = async () => {
+  const handleDelete = async (id) => {
+    if (!window.confirm('Delete this student?')) return;
     try {
-      const res = await axios.get('http://localhost:5000/api/admin/professors');
-      setProfessors(res.data);
+      const token = localStorage.getItem('token');
+      await axios.delete(`http://localhost:5000/api/admin/users/${id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      fetchUsers();
     } catch (err) {
-      console.error('Failed to fetch professors');
+      alert('Failed to delete student');
     }
   };
 
-  const handleDeleteUser = async (userId) => {
-    if (!window.confirm('Are you sure you want to delete this user?')) return;
+  const openNotificationModal = (userId) => {
+    setSelectedUserId(userId);
+    setNotificationMessage('');
+    setShowNotificationModal(true);
+  };
+
+  const sendNotification = async () => {
+    if (!notificationMessage.trim()) {
+      alert('Please enter a message');
+      return;
+    }
+    setSending(true);
     try {
-      await axios.delete(`http://localhost:5000/api/admin/users/${userId}`);
-      fetchStudents();
+      const token = localStorage.getItem('token');
+      await axios.post(
+        'http://localhost:5000/api/admin/notifications',
+        {
+          userId: selectedUserId,
+          message: notificationMessage,
+          link: null // optional, can add later
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      alert('Notification sent!');
+      setShowNotificationModal(false);
     } catch (err) {
-      alert('Failed to delete user');
+      alert('Failed to send notification');
+    } finally {
+      setSending(false);
     }
   };
 
-  const handleDeleteProfessor = async (profId) => {
-    if (!window.confirm('Are you sure you want to delete this professor?')) return;
-    try {
-      await axios.delete(`http://localhost:5000/api/admin/professors/${profId}`);
-      fetchProfessors();
-    } catch (err) {
-      alert('Failed to delete professor');
-    }
-  };
-
-  const startEdit = (item) => {
-    setEditingUser(item);
-    setEditForm({ name: item.name || '', email: item.email || '', role: item.role || 'student' });
-  };
-
-  const cancelEdit = () => {
-    setEditingUser(null);
-    setEditForm({ name: '', email: '', role: '' });
-  };
-
-  const saveEdit = async () => {
-    try {
-      await axios.put(`http://localhost:5000/api/admin/users/${editingUser._id}`, editForm);
-      fetchStudents();
-      cancelEdit();
-    } catch (err) {
-      alert('Failed to update user');
-    }
-  };
+  if (loading) return <div className="text-center text-white py-20">Loading students...</div>;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-700 via-indigo-800 to-blue-900 animate-gradient-xy">
-      {/* Animated blobs */}
-      <div className="fixed w-64 h-64 bg-purple-500 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob top-0 -left-10"></div>
-      <div className="fixed w-72 h-72 bg-yellow-500 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-2000 bottom-0 right-0"></div>
-
-      {/* Navbar */}
-      <nav className="relative z-10 glass text-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <Link to="/admin" className="text-2xl font-bold bg-gradient-to-r from-purple-300 to-pink-300 bg-clip-text text-transparent">
-              Manage Users
-            </Link>
-            <div className="flex items-center space-x-4">
+    <ClickSpark sparkColor="#fff">
+      <div className="min-h-screen bg-gradient-to-br from-purple-700 via-indigo-800 to-blue-900">
+        {/* Navbar */}
+        <nav className="glass text-white">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex justify-between items-center h-16">
+              <Link to="/admin" className="text-2xl font-bold bg-gradient-to-r from-purple-300 to-pink-300 bg-clip-text text-transparent">
+                Manage Students
+              </Link>
               <Link to="/admin" className="text-white/80 hover:text-white">Back to Admin</Link>
             </div>
           </div>
-        </div>
-      </nav>
+        </nav>
 
-      <main className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Tabs */}
-        <div className="flex space-x-2 mb-6 overflow-x-auto pb-2">
-          <button
-            onClick={() => setActiveTab('students')}
-            className={`px-4 py-2 rounded-lg font-medium transition ${
-              activeTab === 'students'
-                ? 'bg-purple-500 text-white'
-                : 'glass text-white/80 hover:text-white'
-            }`}
-          >
-            Students ({users.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('professors')}
-            className={`px-4 py-2 rounded-lg font-medium transition ${
-              activeTab === 'professors'
-                ? 'bg-purple-500 text-white'
-                : 'glass text-white/80 hover:text-white'
-            }`}
-          >
-            Professors ({professors.length})
-          </button>
-        </div>
+        <main className="max-w-7xl mx-auto px-4 py-8">
+          <h1 className="text-3xl font-bold text-white mb-6">Students</h1>
+          {error && <div className="bg-red-500/20 text-red-200 p-3 rounded mb-4">{error}</div>}
 
-        {/* Students Tab */}
-        {activeTab === 'students' && (
-          <div className="glass rounded-xl p-6">
+          {/* Filters */}
+          <div className="glass p-4 rounded-lg mb-6 flex flex-col sm:flex-row gap-4">
+            <div className="flex-1">
+              <label className="block text-white/80 text-sm mb-1">Filter by College</label>
+              <select
+                value={selectedCollege}
+                onChange={(e) => setSelectedCollege(e.target.value)}
+                className="w-full p-2 bg-white/20 border border-white/30 rounded text-white"
+              >
+                <option value="" className="bg-gray-800 text-white">All Colleges</option>
+                {colleges.map(col => (
+                  <option key={col._id} value={col._id} className="bg-gray-800 text-white">{col.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex-1">
+              <label className="block text-white/80 text-sm mb-1">Filter by Course</label>
+              <select
+                value={selectedCourse}
+                onChange={(e) => setSelectedCourse(e.target.value)}
+                disabled={!selectedCollege}
+                className="w-full p-2 bg-white/20 border border-white/30 rounded text-white disabled:opacity-50"
+              >
+                <option value="" className="bg-gray-800 text-white">All Courses</option>
+                {courses.map(crs => (
+                  <option key={crs._id} value={crs._id} className="bg-gray-800 text-white">{crs.name} ({crs.code})</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Students Table */}
+          <div className="glass rounded-xl overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-white">
-                <thead>
-                  <tr className="border-b border-white/20">
-                    <th className="text-left py-3 px-2">Username</th>
-                    <th className="text-left py-3 px-2">Name</th>
-                    <th className="text-left py-3 px-2">Email</th>
-                    <th className="text-left py-3 px-2">Role</th>
-                    <th className="text-left py-3 px-2">College</th>
-                    <th className="text-left py-3 px-2">Tokens</th>
-                    <th className="text-left py-3 px-2">Actions</th>
+                <thead className="bg-white/10">
+                  <tr>
+                    <th className="px-6 py-3 text-left">Username</th>
+                    <th className="px-6 py-3 text-left">Name</th>
+                    <th className="px-6 py-3 text-left">Email</th>
+                    <th className="px-6 py-3 text-left">College</th>
+                    <th className="px-6 py-3 text-left">Course</th>
+                    <th className="px-6 py-3 text-left">Tokens</th>
+                    <th className="px-6 py-3 text-left">Actions</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-white/10">
                   {users.map(u => (
-                    <tr key={u._id} className="border-b border-white/10 hover:bg-white/5">
-                      <td className="py-3 px-2">{u.username}</td>
-                      <td className="py-3 px-2">{u.name || '-'}</td>
-                      <td className="py-3 px-2">{u.email}</td>
-                      <td className="py-3 px-2">
-                        <span className={`px-2 py-1 rounded-full text-xs ${
-                          u.role === 'admin' ? 'bg-red-500/30 text-red-200' :
-                          u.role === 'professor' ? 'bg-green-500/30 text-green-200' :
-                          'bg-blue-500/30 text-blue-200'
-                        }`}>
-                          {u.role}
-                        </span>
-                      </td>
-                      <td className="py-3 px-2">{u.college?.name || '-'}</td>
-                      <td className="py-3 px-2">{u.studyTokens}</td>
-                      <td className="py-3 px-2">
+                    <tr key={u._id} className="hover:bg-white/5">
+                      <td className="px-6 py-4">{u.username}</td>
+                      <td className="px-6 py-4">{u.name || '-'}</td>
+                      <td className="px-6 py-4">{u.email}</td>
+                      <td className="px-6 py-4">{u.college?.name || '-'}</td>
+                      <td className="px-6 py-4">{u.course?.name || '-'}</td>
+                      <td className="px-6 py-4">{u.studyTokens}</td>
+                      <td className="px-6 py-4">
                         <button
-                          onClick={() => startEdit(u)}
-                          className="text-blue-300 hover:text-blue-200 mr-2"
+                          onClick={() => openNotificationModal(u._id)}
+                          className="bg-blue-500/20 hover:bg-blue-500/30 text-blue-200 px-3 py-1 rounded mr-2"
                         >
-                          Edit
+                          Notify
                         </button>
                         <button
-                          onClick={() => handleDeleteUser(u._id)}
+                          onClick={() => handleDelete(u._id)}
                           className="text-red-300 hover:text-red-200"
                         >
                           Delete
@@ -175,95 +226,54 @@ export default function ManageUsers() {
               </table>
             </div>
           </div>
-        )}
+          {users.length === 0 && <p className="text-center text-white/70 mt-4">No students found.</p>}
+        </main>
 
-        {/* Professors Tab */}
-        {activeTab === 'professors' && (
-          <div className="glass rounded-xl p-6">
-            <div className="overflow-x-auto">
-              <table className="w-full text-white">
-                <thead>
-                  <tr className="border-b border-white/20">
-                    <th className="text-left py-3 px-2">Name</th>
-                    <th className="text-left py-3 px-2">Email</th>
-                    <th className="text-left py-3 px-2">College</th>
-                    <th className="text-left py-3 px-2">Courses</th>
-                    <th className="text-left py-3 px-2">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {professors.map(p => (
-                    <tr key={p._id} className="border-b border-white/10 hover:bg-white/5">
-                      <td className="py-3 px-2">{p.name}</td>
-                      <td className="py-3 px-2">{p.email}</td>
-                      <td className="py-3 px-2">{p.college?.name || '-'}</td>
-                      <td className="py-3 px-2">
-                        {p.courses?.map(c => c.name).join(', ') || '-'}
-                      </td>
-                      <td className="py-3 px-2">
-                        <button
-                          onClick={() => handleDeleteProfessor(p._id)}
-                          className="text-red-300 hover:text-red-200"
-                        >
-                          Delete
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* Edit Modal */}
-        {editingUser && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="glass p-6 rounded-xl w-full max-w-md">
-              <h3 className="text-xl font-bold text-white mb-4">Edit User</h3>
-              <div className="space-y-4">
-                <input
-                  type="text"
-                  placeholder="Name"
-                  value={editForm.name}
-                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                  className="w-full px-4 py-2 bg-white/20 border border-white/30 rounded-lg text-white"
+        {/* Notification Modal */}
+        <AnimatePresence>
+          {showNotificationModal && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+              onClick={() => setShowNotificationModal(false)}
+            >
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+                className="bg-gray-900 p-6 rounded-lg max-w-md w-full"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <h3 className="text-xl font-bold text-white mb-4">Send Notification</h3>
+                <textarea
+                  rows="4"
+                  value={notificationMessage}
+                  onChange={(e) => setNotificationMessage(e.target.value)}
+                  placeholder="Enter your message..."
+                  className="w-full p-3 bg-gray-800 border border-gray-700 rounded text-white mb-4"
                 />
-                <input
-                  type="email"
-                  placeholder="Email"
-                  value={editForm.email}
-                  onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                  className="w-full px-4 py-2 bg-white/20 border border-white/30 rounded-lg text-white"
-                />
-                <select
-                  value={editForm.role}
-                  onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}
-                  className="w-full px-4 py-2 bg-white/20 border border-white/30 rounded-lg text-white"
-                >
-                  <option value="student">Student</option>
-                  <option value="professor">Professor</option>
-                  <option value="admin">Admin</option>
-                </select>
-              </div>
-              <div className="flex justify-end space-x-3 mt-6">
-                <button
-                  onClick={cancelEdit}
-                  className="px-4 py-2 bg-white/20 text-white rounded-lg hover:bg-white/30"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={saveEdit}
-                  className="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600"
-                >
-                  Save
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </main>
-    </div>
+                <div className="flex justify-end space-x-3">
+                  <button
+                    onClick={() => setShowNotificationModal(false)}
+                    className="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={sendNotification}
+                    disabled={sending}
+                    className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50"
+                  >
+                    {sending ? 'Sending...' : 'Send'}
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </ClickSpark>
   );
 }

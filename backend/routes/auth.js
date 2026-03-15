@@ -13,7 +13,6 @@ router.post('/request-otp', async (req, res) => {
   if (!mobile) {
     return res.status(400).json({ error: 'Mobile number is required' });
   }
-  // In a real app you would send SMS here
   console.log(`OTP request for ${mobile} – use 123456`);
   res.json({ message: 'OTP sent successfully' });
 });
@@ -27,7 +26,6 @@ router.post('/verify-otp', async (req, res) => {
     if (!mobile || !otp) {
       return res.status(400).json({ error: 'Mobile and OTP are required' });
     }
-    // Demo OTP check
     if (otp !== '123456') {
       return res.status(400).json({ error: 'Invalid or expired OTP' });
     }
@@ -35,7 +33,6 @@ router.post('/verify-otp', async (req, res) => {
     let user = await User.findOne({ mobile });
 
     if (!user) {
-      // New user: require email and username
       if (!email || !username) {
         return res.status(400).json({ error: 'Email and username required for new user' });
       }
@@ -82,12 +79,16 @@ router.post('/verify-otp', async (req, res) => {
 router.post('/professor/register', async (req, res) => {
   try {
     const { name, email, password, college, courses } = req.body;
+    console.log('📥 Professor registration attempt:', { name, email, college, courses });
+
     if (!name || !email || !password || !college) {
+      console.log('❌ Missing required fields');
       return res.status(400).json({ error: 'All fields are required' });
     }
 
     const existing = await Professor.findOne({ email });
     if (existing) {
+      console.log('❌ Professor already exists:', email);
       return res.status(400).json({ error: 'Professor already registered' });
     }
 
@@ -100,11 +101,14 @@ router.post('/professor/register', async (req, res) => {
       approved: false
     });
 
+    console.log('📦 Professor object created, about to save...');
     await professor.save();
+    console.log('✅ Professor saved successfully, ID:', professor._id);
+
     res.status(201).json({ message: 'Registration successful. Await admin approval.' });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error' });
+    console.error('❌ Professor registration error:', err);
+    res.status(500).json({ error: 'Server error during registration' });
   }
 });
 
@@ -189,6 +193,25 @@ router.post('/admin/login', async (req, res) => {
         email: admin.email
       }
     });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// @route   GET /api/auth/check-user/:mobile
+// @desc    Check if user exists by mobile (for pre-filling OTP form)
+// @access  Public
+// @route   GET /api/auth/check-user/:mobile
+router.get('/check-user/:mobile', async (req, res) => {
+  try {
+    const { mobile } = req.params;
+    const user = await User.findOne({ mobile }).select('email username');
+    if (user) {
+      res.json({ exists: true, email: user.email, username: user.username });
+    } else {
+      res.json({ exists: false });
+    }
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });

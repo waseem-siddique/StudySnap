@@ -5,166 +5,41 @@ const College = require('../models/College');
 const Course = require('../models/Course');
 const Video = require('../models/Video');
 const Material = require('../models/Material');
+const Notification = require('../models/Notification');
 const auth = require('../middleware/auth');
 
-// Middleware to check if user is admin
+// Middleware to check if user is admin (supports both User and Admin models)
 const isAdmin = async (req, res, next) => {
   try {
+    // First try to find in User collection (for backward compatibility)
     const user = await User.findById(req.user.id);
-    if (user.role !== 'admin') {
-      return res.status(403).json({ error: 'Admin access required' });
+    if (user && user.role === 'admin') {
+      req.user.role = 'admin'; // ensure role is set
+      return next();
     }
-    next();
+
+    // If not found or not admin, try Admin collection
+    const Admin = require('../models/Admin'); // lazy import to avoid circular dependency
+    const admin = await Admin.findById(req.user.id);
+    if (admin) {
+      req.user.role = 'admin';
+      return next();
+    }
+
+    return res.status(403).json({ error: 'Admin access required' });
   } catch (err) {
-    res.status(500).json({ error: 'Server error' });
+    console.error('isAdmin middleware error:', err);
+    return res.status(500).json({ error: 'Server error' });
   }
 };
 
-// ==================== User Management ====================
-
-// @route   GET /api/admin/users
-// @desc    Get all students (users)
-// @access  Private (Admin)
-router.get('/users', auth, isAdmin, async (req, res) => {
-  try {
-    const users = await User.find({ role: 'student' })
-      .populate('college', 'name')
-      .populate('course', 'name code')
-      .select('-pendingRequests -connections');
-    res.json(users);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// @route   GET /api/admin/users/:id
-// @desc    Get single user by ID
-// @access  Private (Admin)
-router.get('/users/:id', auth, isAdmin, async (req, res) => {
-  try {
-    const user = await User.findById(req.params.id)
-      .populate('college', 'name')
-      .populate('course', 'name code');
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    res.json(user);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// @route   PUT /api/admin/users/:id
-// @desc    Update user (e.g., change role, reset tokens, etc.)
-// @access  Private (Admin)
-router.put('/users/:id', auth, isAdmin, async (req, res) => {
-  try {
-    const { name, email, role, studyTokens, college, course } = req.body;
-    const updateData = {};
-    if (name) updateData.name = name;
-    if (email) updateData.email = email;
-    if (role) updateData.role = role;
-    if (studyTokens !== undefined) updateData.studyTokens = studyTokens;
-    if (college) updateData.college = college;
-    if (course) updateData.course = course;
-
-    const user = await User.findByIdAndUpdate(
-      req.params.id,
-      updateData,
-      { new: true }
-    );
-    res.json(user);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// @route   DELETE /api/admin/users/:id
-// @desc    Delete a user
-// @access  Private (Admin)
-router.delete('/users/:id', auth, isAdmin, async (req, res) => {
-  try {
-    await User.findByIdAndDelete(req.params.id);
-    res.json({ message: 'User deleted' });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// ==================== Professor Management ====================
-
-// @route   GET /api/admin/professors
-// @desc    Get all professors
-// @access  Private (Admin)
-router.get('/professors', auth, isAdmin, async (req, res) => {
-  try {
-    const professors = await Professor.find()
-      .populate('college', 'name')
-      .populate('courses', 'name code');
-    res.json(professors);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// @route   POST /api/admin/professors
-// @desc    Add a new professor
-// @access  Private (Admin)
-router.post('/professors', auth, isAdmin, async (req, res) => {
-  try {
-    const { name, email, college, courses } = req.body;
-    const professor = new Professor({ name, email, college, courses });
-    await professor.save();
-    res.status(201).json(professor);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// @route   PUT /api/admin/professors/:id
-// @desc    Update professor
-// @access  Private (Admin)
-router.put('/professors/:id', auth, isAdmin, async (req, res) => {
-  try {
-    const professor = await Professor.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true }
-    );
-    res.json(professor);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// @route   DELETE /api/admin/professors/:id
-// @desc    Delete professor
-// @access  Private (Admin)
-router.delete('/professors/:id', auth, isAdmin, async (req, res) => {
-  try {
-    await Professor.findByIdAndDelete(req.params.id);
-    res.json({ message: 'Professor deleted' });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// ==================== College Management ====================
-
+// ==================== College Routes ====================
 // @route   GET /api/admin/colleges
 // @desc    Get all colleges
 // @access  Private (Admin)
 router.get('/colleges', auth, isAdmin, async (req, res) => {
   try {
-    const colleges = await College.find();
+    const colleges = await College.find().sort({ name: 1 });
     res.json(colleges);
   } catch (err) {
     console.error(err);
@@ -178,6 +53,7 @@ router.get('/colleges', auth, isAdmin, async (req, res) => {
 router.post('/colleges', auth, isAdmin, async (req, res) => {
   try {
     const { name, location } = req.body;
+    if (!name) return res.status(400).json({ error: 'College name is required' });
     const college = new College({ name, location });
     await college.save();
     res.status(201).json(college);
@@ -188,15 +64,16 @@ router.post('/colleges', auth, isAdmin, async (req, res) => {
 });
 
 // @route   PUT /api/admin/colleges/:id
-// @desc    Update college
+// @desc    Update a college
 // @access  Private (Admin)
 router.put('/colleges/:id', auth, isAdmin, async (req, res) => {
   try {
     const college = await College.findByIdAndUpdate(
       req.params.id,
       req.body,
-      { new: true }
+      { new: true, runValidators: true }
     );
+    if (!college) return res.status(404).json({ error: 'College not found' });
     res.json(college);
   } catch (err) {
     console.error(err);
@@ -205,26 +82,30 @@ router.put('/colleges/:id', auth, isAdmin, async (req, res) => {
 });
 
 // @route   DELETE /api/admin/colleges/:id
-// @desc    Delete college
+// @desc    Delete a college
 // @access  Private (Admin)
 router.delete('/colleges/:id', auth, isAdmin, async (req, res) => {
   try {
-    await College.findByIdAndDelete(req.params.id);
-    res.json({ message: 'College deleted' });
+    const college = await College.findByIdAndDelete(req.params.id);
+    if (!college) return res.status(404).json({ error: 'College not found' });
+    res.json({ message: 'College deleted successfully' });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-// ==================== Course Management ====================
-
+// ==================== Course Routes ====================
 // @route   GET /api/admin/courses
-// @desc    Get all courses
+// @desc    Get all courses (optionally filtered by college)
 // @access  Private (Admin)
 router.get('/courses', auth, isAdmin, async (req, res) => {
   try {
-    const courses = await Course.find().populate('college', 'name');
+    const { college } = req.query;
+    const filter = college ? { college } : {};
+    const courses = await Course.find(filter)
+      .populate('college', 'name')
+      .sort({ name: 1 });
     res.json(courses);
   } catch (err) {
     console.error(err);
@@ -238,8 +119,12 @@ router.get('/courses', auth, isAdmin, async (req, res) => {
 router.post('/courses', auth, isAdmin, async (req, res) => {
   try {
     const { name, code, college, description } = req.body;
+    if (!name || !code || !college) {
+      return res.status(400).json({ error: 'Name, code, and college are required' });
+    }
     const course = new Course({ name, code, college, description });
     await course.save();
+    await course.populate('college', 'name');
     res.status(201).json(course);
   } catch (err) {
     console.error(err);
@@ -248,15 +133,16 @@ router.post('/courses', auth, isAdmin, async (req, res) => {
 });
 
 // @route   PUT /api/admin/courses/:id
-// @desc    Update course
+// @desc    Update a course
 // @access  Private (Admin)
 router.put('/courses/:id', auth, isAdmin, async (req, res) => {
   try {
     const course = await Course.findByIdAndUpdate(
       req.params.id,
       req.body,
-      { new: true }
-    );
+      { new: true, runValidators: true }
+    ).populate('college', 'name');
+    if (!course) return res.status(404).json({ error: 'Course not found' });
     res.json(course);
   } catch (err) {
     console.error(err);
@@ -265,22 +151,123 @@ router.put('/courses/:id', auth, isAdmin, async (req, res) => {
 });
 
 // @route   DELETE /api/admin/courses/:id
-// @desc    Delete course
+// @desc    Delete a course
 // @access  Private (Admin)
 router.delete('/courses/:id', auth, isAdmin, async (req, res) => {
   try {
-    await Course.findByIdAndDelete(req.params.id);
-    res.json({ message: 'Course deleted' });
+    const course = await Course.findByIdAndDelete(req.params.id);
+    if (!course) return res.status(404).json({ error: 'Course not found' });
+    res.json({ message: 'Course deleted successfully' });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-// ==================== Video Moderation ====================
+// ==================== Student Routes ====================
+// @route   GET /api/admin/users
+// @desc    Get all students (optionally filtered by college and course)
+// @access  Private (Admin)
+router.get('/users', auth, isAdmin, async (req, res) => {
+  try {
+    const { college, course } = req.query;
+    let filter = { role: 'student' };
+    if (college) filter.college = college;
+    if (course) filter.course = course;
 
+    const users = await User.find(filter)
+      .populate('college', 'name')
+      .populate('course', 'name code')
+      .select('-password -pendingRequests -connections');
+    res.json(users);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// @route   DELETE /api/admin/users/:id
+// @desc    Delete a student
+// @access  Private (Admin)
+router.delete('/users/:id', auth, isAdmin, async (req, res) => {
+  try {
+    const user = await User.findByIdAndDelete(req.params.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    res.json({ message: 'User deleted successfully' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+
+// ==================== Professor Routes ====================
+// @route   GET /api/admin/professors
+// @desc    Get all professors (both approved and pending)
+// @access  Private (Admin)
+router.get('/professors', auth, isAdmin, async (req, res) => {
+  try {
+    const professors = await Professor.find()
+      .populate('college', 'name')
+      .populate('courses', 'name');
+    res.json(professors);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// @route   GET /api/admin/professors/pending
+// @desc    Get all professors pending approval
+// @access  Private (Admin)
+router.get('/professors/pending', auth, isAdmin, async (req, res) => {
+  try {
+    const professors = await Professor.find({ approved: false })
+      .populate('college', 'name')
+      .populate('courses', 'name');
+    res.json(professors);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// @route   PUT /api/admin/professors/:id/approve
+// @desc    Approve or reject a professor
+// @access  Private (Admin)
+router.put('/professors/:id/approve', auth, isAdmin, async (req, res) => {
+  try {
+    const { approved } = req.body;
+    const professor = await Professor.findByIdAndUpdate(
+      req.params.id,
+      { approved },
+      { new: true }
+    );
+    if (!professor) return res.status(404).json({ error: 'Professor not found' });
+    res.json(professor);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// @route   DELETE /api/admin/professors/:id
+// @desc    Delete a professor
+// @access  Private (Admin)
+router.delete('/professors/:id', auth, isAdmin, async (req, res) => {
+  try {
+    const professor = await Professor.findByIdAndDelete(req.params.id);
+    if (!professor) return res.status(404).json({ error: 'Professor not found' });
+    res.json({ message: 'Professor deleted successfully' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ==================== Video Routes ====================
 // @route   GET /api/admin/videos/pending
-// @desc    Get all pending videos (already in video.js, but included here for admin completeness)
+// @desc    Get all pending videos
 // @access  Private (Admin)
 router.get('/videos/pending', auth, isAdmin, async (req, res) => {
   try {
@@ -305,6 +292,7 @@ router.put('/videos/:id/approve', auth, isAdmin, async (req, res) => {
       { approved },
       { new: true }
     );
+    if (!video) return res.status(404).json({ error: 'Video not found' });
     res.json(video);
   } catch (err) {
     console.error(err);
@@ -312,15 +300,15 @@ router.put('/videos/:id/approve', auth, isAdmin, async (req, res) => {
   }
 });
 
-// ==================== Dashboard Stats ====================
-
+// ==================== Statistics ====================
 // @route   GET /api/admin/stats
-// @desc    Get platform statistics for admin dashboard
+// @desc    Get platform statistics
 // @access  Private (Admin)
 router.get('/stats', auth, isAdmin, async (req, res) => {
   try {
     const totalStudents = await User.countDocuments({ role: 'student' });
     const totalProfessors = await Professor.countDocuments();
+    const pendingProfessors = await Professor.countDocuments({ approved: false });
     const totalColleges = await College.countDocuments();
     const totalCourses = await Course.countDocuments();
     const totalVideos = await Video.countDocuments();
@@ -330,6 +318,7 @@ router.get('/stats', auth, isAdmin, async (req, res) => {
     res.json({
       totalStudents,
       totalProfessors,
+      pendingProfessors,
       totalColleges,
       totalCourses,
       totalVideos,
@@ -341,32 +330,32 @@ router.get('/stats', auth, isAdmin, async (req, res) => {
     res.status(500).json({ error: 'Server error' });
   }
 });
-// Get all pending professors
-router.get('/professors/pending', auth, isAdmin, async (req, res) => {
+
+
+  // @route   POST /api/admin/notifications
+// @desc    Send a notification to a specific user (admin only)
+// @access  Private (Admin)
+router.post('/notifications', auth, isAdmin, async (req, res) => {
   try {
-    const professors = await Professor.find({ approved: false })
-      .populate('college', 'name')
-      .populate('courses', 'name');
-    res.json(professors);
+    const { userId, message, link } = req.body;
+    if (!userId || !message) {
+      return res.status(400).json({ error: 'User ID and message required' });
+    }
+
+    const notification = new Notification({
+      recipient: userId,
+      sender: req.user.id,
+      type: 'admin_message',
+      message,
+      link: link || null
+    });
+    await notification.save();
+
+    res.status(201).json({ message: 'Notification sent' });
   } catch (err) {
-    console.error(err);
+    console.error('❌ POST /api/admin/notifications error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-// Approve professor
-router.put('/professors/:id/approve', auth, isAdmin, async (req, res) => {
-  try {
-    const { approved } = req.body; // true/false
-    const professor = await Professor.findByIdAndUpdate(
-      req.params.id,
-      { approved },
-      { new: true }
-    );
-    res.json(professor);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
 module.exports = router;

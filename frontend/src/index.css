@@ -46,4 +46,8 @@
   .glass {
     @apply bg-white/10 backdrop-blur-lg border border-white/20;
   }
+  button:has(span:contains("Scan Now & Mark Attendance")) {
+  position: relative;
+  z-index: 40;
+}
 }

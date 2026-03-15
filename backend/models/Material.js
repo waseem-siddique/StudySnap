@@ -8,7 +8,7 @@ const materialSchema = new mongoose.Schema({
   },
   fileUrl: {
     type: String,
-    required: true // Path to PDF file
+    required: true
   },
   uploadedBy: {
     type: mongoose.Schema.Types.ObjectId,
@@ -17,13 +17,18 @@ const materialSchema = new mongoose.Schema({
   },
   course: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Course'
+    ref: 'Course',
+    required: true // Now required
   },
   description: {
     type: String,
     default: ''
   },
   createdAt: {
+    type: Date,
+    default: Date.now
+  },
+  updatedAt: {
     type: Date,
     default: Date.now
   }

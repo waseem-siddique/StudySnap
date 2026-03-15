@@ -2,55 +2,24 @@ const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
 const professorSchema = new mongoose.Schema({
-  name: {
-    type: String,
-    required: true,
-    trim: true
-  },
-  email: {
-    type: String,
-    required: true,
-    unique: true,
-    trim: true,
-    lowercase: true
-  },
-  password: {
-    type: String,
-    required: true,
-    minlength: 6
-  },
-  college: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'College',
-    required: true
-  },
-  courses: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Course'
-  }],
-  profilePicture: {
-    type: String,
-    default: ''
-  },
-  bio: {
-    type: String,
-    default: ''
-  },
-  approved: {
-    type: Boolean,
-    default: false  // admin must approve
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now
-  }
+  name: { type: String, required: true },
+  email: { type: String, required: true, unique: true },
+  password: { type: String, required: true },
+  college: { type: mongoose.Schema.Types.ObjectId, ref: 'College', required: true },
+  courses: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Course' }],
+  approved: { type: Boolean, default: false },
+  createdAt: { type: Date, default: Date.now }
 });
 
-// Hash password before saving
-professorSchema.pre('save', async function(next) {
-  if (!this.isModified('password')) return next();
-  this.password = await bcrypt.hash(this.password, 10);
-  next();
+// Hash password before saving – async function without next
+professorSchema.pre('save', async function() {
+  if (!this.isModified('password')) return;
+  try {
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
+  } catch (err) {
+    throw err; // Mongoose will handle the error
+  }
 });
 
 // Method to compare password

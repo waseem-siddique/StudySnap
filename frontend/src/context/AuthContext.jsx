@@ -22,7 +22,11 @@ export const AuthProvider = ({ children }) => {
   // Fetch user profile when token changes
   useEffect(() => {
     const fetchUser = async () => {
+      // Set loading true immediately when token changes
+      setLoading(true);
+      
       if (!token) {
+        setUser(null);
         setLoading(false);
         return;
       }
@@ -43,18 +47,31 @@ export const AuthProvider = ({ children }) => {
     fetchUser();
   }, [token]);
 
-  const login = (newToken, userData) => {
+  const login = (newToken) => {
     localStorage.setItem('token', newToken);
     setToken(newToken);
-    setUser(userData);
+    // User will be fetched automatically by the above effect
   };
 
   const logout = () => {
     localStorage.removeItem('token');
+    sessionStorage.removeItem('instructionsShown');
     setToken(null);
     setUser(null);
     delete axios.defaults.headers.common['Authorization'];
-    // PrivateRoute will automatically redirect to /login because user becomes null
+  };
+
+  const refreshUser = async () => {
+    if (!token) return;
+    try {
+      const res = await axios.get('http://localhost:5000/api/users/me');
+      setUser(res.data);
+    } catch (err) {
+      console.error('Failed to refresh user', err);
+      if (err.response?.status === 401) {
+        logout();
+      }
+    }
   };
 
   const value = {
@@ -62,6 +79,7 @@ export const AuthProvider = ({ children }) => {
     token,
     login,
     logout,
+    refreshUser,
     loading
   };
 

@@ -2,82 +2,96 @@ import React, { useState } from 'react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import { Link, useNavigate } from 'react-router-dom';
+import Background from '../components/Background';
+import Logo from '../components/Logo';
+import { API_BASE_URL } from '../config';
+
+
 
 export default function Login() {
-  const [activeTab, setActiveTab] = useState('student'); // 'student' or 'professor'
-  const navigate = useNavigate();
-
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-700 via-indigo-800 to-blue-900 animate-gradient-xy p-4">
-      <div className="glass p-8 rounded-lg w-full max-w-md">
-        <h1 className="text-3xl font-bold text-white text-center mb-2">StudySnap</h1>
-        <p className="text-white/80 text-center mb-6">Connect, Learn, Earn</p>
+    <Background>
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="glass p-8 rounded-lg w-full max-w-md">
+          <h1 className="flex justify-center mb-2"><Logo /></h1>
+          <p className="text-white/80 text-center mb-6">Connect, Learn, Earn</p>
 
-        {/* Tabs */}
-        <div className="flex mb-6">
-          <button
-            onClick={() => setActiveTab('student')}
-            className={`flex-1 py-2 rounded-l-lg transition ${
-              activeTab === 'student'
-                ? 'bg-purple-600 text-white'
-                : 'bg-white/20 text-white/80 hover:bg-white/30'
-            }`}
-          >
-            Student
-          </button>
-          <button
-            onClick={() => setActiveTab('professor')}
-            className={`flex-1 py-2 rounded-r-lg transition ${
-              activeTab === 'professor'
-                ? 'bg-purple-600 text-white'
-                : 'bg-white/20 text-white/80 hover:bg-white/30'
-            }`}
-          >
-            Professor
-          </button>
+          <StudentLogin />
+
+          <div className="mt-6 space-y-2 text-center">
+            <p className="text-white/70">
+              Professor?{' '}
+              <Link to="/professor/login" className="text-purple-300 hover:text-purple-200">
+                Click here
+              </Link>
+            </p>
+            <p className="text-white/70">
+              Admin?{' '}
+              <Link to="/admin/login" className="text-purple-300 hover:text-purple-200">
+                Click here
+              </Link>
+            </p>
+          </div>
         </div>
-
-        {activeTab === 'student' ? <StudentLogin /> : <ProfessorLogin />}
-
-        {/* Admin Login Link */}
-        <p className="mt-4 text-white/70 text-center">
-          <Link to="/admin/login" className="text-purple-300 hover:text-purple-200">Admin Login? Click Here</Link>
-        </p>
       </div>
-    </div>
+    </Background>
   );
 }
 
-// ---------- Student Login (OTP) ----------
 function StudentLogin() {
   const [mobile, setMobile] = useState('');
   const [otp, setOtp] = useState('');
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
-  const [step, setStep] = useState(1); // 1: mobile, 2: otp
+  const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [userExists, setUserExists] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
 
   const requestOtp = async (e) => {
-    e.preventDefault();
-    if (!mobile || mobile.length < 10) {
-      setError('Enter a valid 10-digit mobile number');
-      return;
+  e.preventDefault();
+  if (!mobile || mobile.length < 10) {
+    setError('Enter a valid 10-digit mobile number');
+    return;
+  }
+  setLoading(true);
+  setError('');
+  try {
+    await axios.post('http://localhost:5000/api/auth/request-otp', { mobile });
+    console.log('OTP sent, now checking user...');
+    const checkRes = await axios.get(`http://localhost:5000/api/auth/check-user/${mobile}`);
+    console.log('Check user response:', checkRes.data);
+    if (checkRes.data.exists) {
+      setUserExists(true);
+      setEmail(checkRes.data.email);
+      setUsername(checkRes.data.username);
+    } else {
+      setUserExists(false);
+      setEmail('');
+      setUsername('');
     }
-    setLoading(true);
-    setError('');
-    try {
-      await axios.post('http://localhost:5000/api/auth/request-otp', { mobile });
-      setStep(2);
-    } catch (err) {
-      setError(err.response?.data?.error || 'Failed to send OTP. Check backend connection.');
-    } finally {
-      setLoading(false);
+    setStep(2);
+  } catch (err) {
+    console.error('Full error:', err);
+    if (err.response) {
+      // The request was made and the server responded with a status code
+      console.error('Error response data:', err.response.data);
+      console.error('Error response status:', err.response.status);
+    } else if (err.request) {
+      // The request was made but no response was received
+      console.error('No response received:', err.request);
+    } else {
+      // Something happened in setting up the request
+      console.error('Request setup error:', err.message);
     }
-  };
-
+    setError(err.response?.data?.error || 'Failed to send OTP');
+  } finally {
+    setLoading(false);
+  }
+};
+// ... inside StudentLogin component, after successful verification:
   const verifyOtp = async (e) => {
     e.preventDefault();
     if (!otp || otp.length !== 6) {
@@ -87,14 +101,14 @@ function StudentLogin() {
     setLoading(true);
     setError('');
     try {
-      const res = await axios.post('http://localhost:5000/api/auth/verify-otp', {
+      const res = await axios.post(`${API_BASE_URL}/auth/verify-otp`, {
         mobile,
         otp,
         email: email || undefined,
         username: username || undefined
       });
-      login(res.data.token, res.data.user);
-      navigate('/dashboard');
+      login(res.data.token); // only token – user will be fetched automatically
+      navigate('/dashboard'); // always go to dashboard; PrivateRoute will handle incomplete profile
     } catch (err) {
       setError(err.response?.data?.error || 'Verification failed');
     } finally {
@@ -140,24 +154,34 @@ function StudentLogin() {
             />
           </div>
           <div className="mb-4">
-            <label className="block text-white/90 text-sm font-medium mb-2">Email (required for new users)</label>
+            <label className="block text-white/90 text-sm font-medium mb-2">Email</label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="Your email"
-              className="w-full px-4 py-3 bg-white/20 border border-white/30 rounded-lg text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-purple-400"
+              className={`w-full px-4 py-3 bg-white/20 border border-white/30 rounded-lg text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-purple-400 ${
+                userExists ? 'opacity-70 cursor-not-allowed' : ''
+              }`}
+              disabled={userExists || loading}
+              readOnly={userExists}
             />
+            {userExists && <p className="text-xs text-white/50 mt-1">This email is associated with your account</p>}
           </div>
           <div className="mb-6">
-            <label className="block text-white/90 text-sm font-medium mb-2">Username (required for new users)</label>
+            <label className="block text-white/90 text-sm font-medium mb-2">Username</label>
             <input
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               placeholder="Choose a unique username"
-              className="w-full px-4 py-3 bg-white/20 border border-white/30 rounded-lg text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-purple-400"
+              className={`w-full px-4 py-3 bg-white/20 border border-white/30 rounded-lg text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-purple-400 ${
+                userExists ? 'opacity-70 cursor-not-allowed' : ''
+              }`}
+              disabled={userExists || loading}
+              readOnly={userExists}
             />
+            {userExists && <p className="text-xs text-white/50 mt-1">Your username is already set</p>}
           </div>
           <button
             type="submit"
@@ -175,69 +199,6 @@ function StudentLogin() {
           </button>
         </form>
       )}
-    </>
-  );
-}
-
-// ---------- Professor Login (Email/Password) ----------
-function ProfessorLogin() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const navigate = useNavigate();
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-    try {
-      const res = await axios.post('http://localhost:5000/api/auth/professor/login', { email, password });
-      localStorage.setItem('token', res.data.token);
-      localStorage.setItem('user', JSON.stringify({ ...res.data.professor, role: 'professor' }));
-      navigate('/dashboard');
-    } catch (err) {
-      setError(err.response?.data?.error || 'Login failed');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <>
-      {error && <div className="bg-red-500/20 border border-red-500 text-white px-4 py-2 rounded-lg mb-4">{error}</div>}
-      <form onSubmit={handleSubmit}>
-        <div className="mb-4">
-          <label className="block text-white/90 text-sm font-medium mb-2">Email</label>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full px-4 py-3 bg-white/20 border border-white/30 rounded-lg text-white"
-            required
-          />
-        </div>
-        <div className="mb-6">
-          <label className="block text-white/90 text-sm font-medium mb-2">Password</label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full px-4 py-3 bg-white/20 border border-white/30 rounded-lg text-white"
-            required
-          />
-        </div>
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full bg-purple-600 text-white py-3 rounded-lg font-semibold hover:bg-purple-700 transition disabled:opacity-50"
-        >
-          {loading ? 'Logging in...' : 'Login'}
-        </button>
-      </form>
-      <p className="mt-3 text-white/70 text-center">
-        New professor? <Link to="/professor/signup" className="text-purple-300 hover:text-purple-200">Sign up here</Link>
-      </p>
     </>
   );
 }
