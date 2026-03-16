@@ -5,9 +5,6 @@ const Admin = require('../models/Admin');
 const jwt = require('jsonwebtoken');
 
 // ---------- Student OTP ----------
-// @route   POST /api/auth/request-otp
-// @desc    Request OTP (demo: always success)
-// @access  Public
 router.post('/request-otp', async (req, res) => {
   const { mobile } = req.body;
   if (!mobile) {
@@ -17,9 +14,6 @@ router.post('/request-otp', async (req, res) => {
   res.json({ message: 'OTP sent successfully' });
 });
 
-// @route   POST /api/auth/verify-otp
-// @desc    Verify OTP (demo: only 123456 works) and login/register student
-// @access  Public
 router.post('/verify-otp', async (req, res) => {
   try {
     const { mobile, otp, email, username } = req.body;
@@ -73,22 +67,15 @@ router.post('/verify-otp', async (req, res) => {
 });
 
 // ---------- Professor ----------
-// @route   POST /api/auth/professor/register
-// @desc    Register a new professor (pending admin approval)
-// @access  Public
 router.post('/professor/register', async (req, res) => {
   try {
     const { name, email, password, college, courses } = req.body;
-    console.log('📥 Professor registration attempt:', { name, email, college, courses });
-
     if (!name || !email || !password || !college) {
-      console.log('❌ Missing required fields');
       return res.status(400).json({ error: 'All fields are required' });
     }
 
     const existing = await Professor.findOne({ email });
     if (existing) {
-      console.log('❌ Professor already exists:', email);
       return res.status(400).json({ error: 'Professor already registered' });
     }
 
@@ -101,20 +88,14 @@ router.post('/professor/register', async (req, res) => {
       approved: false
     });
 
-    console.log('📦 Professor object created, about to save...');
     await professor.save();
-    console.log('✅ Professor saved successfully, ID:', professor._id);
-
     res.status(201).json({ message: 'Registration successful. Await admin approval.' });
   } catch (err) {
-    console.error('❌ Professor registration error:', err);
+    console.error(err);
     res.status(500).json({ error: 'Server error during registration' });
   }
 });
 
-// @route   POST /api/auth/professor/login
-// @desc    Professor login (only if approved)
-// @access  Public
 router.post('/professor/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -159,9 +140,6 @@ router.post('/professor/login', async (req, res) => {
 });
 
 // ---------- Admin ----------
-// @route   POST /api/auth/admin/login
-// @desc    Admin login (email & password)
-// @access  Public
 router.post('/admin/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -200,22 +178,17 @@ router.post('/admin/login', async (req, res) => {
 });
 
 // @route   GET /api/auth/check-user/:mobile
-// @desc    Check if user exists by mobile (for pre-filling OTP form)
-// @access  Public
-// @route   GET /api/auth/check-user/:mobile
 router.get('/check-user/:mobile', async (req, res) => {
   try {
     const { mobile } = req.params;
-    console.log(`Checking user for mobile: ${mobile}`);
     const user = await User.findOne({ mobile }).select('email username');
-    console.log('User found:', user);
     if (user) {
       res.json({ exists: true, email: user.email, username: user.username });
     } else {
       res.json({ exists: false });
     }
   } catch (err) {
-    console.error('❌ Error in /check-user:', err); // This will show in Render logs
+    console.error(err);
     res.status(500).json({ error: 'Server error' });
   }
 });

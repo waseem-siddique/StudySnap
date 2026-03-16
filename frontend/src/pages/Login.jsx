@@ -6,14 +6,14 @@ import Background from '../components/Background';
 import Logo from '../components/Logo';
 import { API_BASE_URL } from '../config';
 
-
-
 export default function Login() {
   return (
     <Background>
       <div className="min-h-screen flex items-center justify-center p-4">
         <div className="glass p-8 rounded-lg w-full max-w-md">
-          <h1 className="flex justify-center mb-2"><Logo /></h1>
+          <div className="flex justify-center mb-2">
+            <Logo />
+          </div>
           <p className="text-white/80 text-center mb-6">Connect, Learn, Earn</p>
 
           <StudentLogin />
@@ -51,47 +51,34 @@ function StudentLogin() {
   const navigate = useNavigate();
 
   const requestOtp = async (e) => {
-  e.preventDefault();
-  if (!mobile || mobile.length < 10) {
-    setError('Enter a valid 10-digit mobile number');
-    return;
-  }
-  setLoading(true);
-  setError('');
-  try {
-    await axios.post('http://localhost:5000/api/auth/request-otp', { mobile });
-    console.log('OTP sent, now checking user...');
-    const checkRes = await axios.get(`http://localhost:5000/api/auth/check-user/${mobile}`);
-    console.log('Check user response:', checkRes.data);
-    if (checkRes.data.exists) {
-      setUserExists(true);
-      setEmail(checkRes.data.email);
-      setUsername(checkRes.data.username);
-    } else {
-      setUserExists(false);
-      setEmail('');
-      setUsername('');
+    e.preventDefault();
+    if (!mobile || mobile.length < 10) {
+      setError('Enter a valid 10-digit mobile number');
+      return;
     }
-    setStep(2);
-  } catch (err) {
-    console.error('Full error:', err);
-    if (err.response) {
-      // The request was made and the server responded with a status code
-      console.error('Error response data:', err.response.data);
-      console.error('Error response status:', err.response.status);
-    } else if (err.request) {
-      // The request was made but no response was received
-      console.error('No response received:', err.request);
-    } else {
-      // Something happened in setting up the request
-      console.error('Request setup error:', err.message);
+    setLoading(true);
+    setError('');
+    try {
+      await axios.post(`${API_BASE_URL}/auth/request-otp`, { mobile });
+      const checkRes = await axios.get(`${API_BASE_URL}/auth/check-user/${mobile}`);
+      if (checkRes.data.exists) {
+        setUserExists(true);
+        setEmail(checkRes.data.email);
+        setUsername(checkRes.data.username);
+      } else {
+        setUserExists(false);
+        setEmail('');
+        setUsername('');
+      }
+      setStep(2);
+    } catch (err) {
+      console.error(err);
+      setError(err.response?.data?.error || 'Failed to send OTP');
+    } finally {
+      setLoading(false);
     }
-    setError(err.response?.data?.error || 'Failed to send OTP');
-  } finally {
-    setLoading(false);
-  }
-};
-// ... inside StudentLogin component, after successful verification:
+  };
+
   const verifyOtp = async (e) => {
     e.preventDefault();
     if (!otp || otp.length !== 6) {
@@ -107,8 +94,8 @@ function StudentLogin() {
         email: email || undefined,
         username: username || undefined
       });
-      login(res.data.token); // only token – user will be fetched automatically
-      navigate('/dashboard'); // always go to dashboard; PrivateRoute will handle incomplete profile
+      login(res.data.token);
+      navigate('/dashboard');
     } catch (err) {
       setError(err.response?.data?.error || 'Verification failed');
     } finally {

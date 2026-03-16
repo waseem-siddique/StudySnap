@@ -3,6 +3,7 @@ import axios from 'axios';
 import { Link, useNavigate } from 'react-router-dom';
 import Background from '../components/Background';
 import Logo from '../components/Logo';
+import { API_BASE_URL } from '../config';
 
 export default function ProfessorSignup() {
   const [formData, setFormData] = useState({
@@ -38,7 +39,7 @@ export default function ProfessorSignup() {
 
   const fetchColleges = async () => {
     try {
-      const res = await axios.get('http://localhost:5000/api/colleges');
+      const res = await axios.get(`${API_BASE_URL}/colleges`);
       setColleges(res.data);
     } catch (err) {
       console.error('Failed to fetch colleges', err);
@@ -48,7 +49,7 @@ export default function ProfessorSignup() {
 
   const fetchCourses = async (collegeId) => {
     try {
-      const res = await axios.get(`http://localhost:5000/api/courses?college=${collegeId}`);
+      const res = await axios.get(`${API_BASE_URL}/courses?college=${collegeId}`);
       setCourses(res.data);
     } catch (err) {
       console.error('Failed to fetch courses', err);
@@ -115,7 +116,7 @@ export default function ProfessorSignup() {
     setError('');
     setSuccess('');
     try {
-      await axios.post('http://localhost:5000/api/auth/professor/register', {
+      await axios.post(`${API_BASE_URL}/auth/professor/register`, {
         name: formData.name,
         email: formData.email,
         password: formData.password,

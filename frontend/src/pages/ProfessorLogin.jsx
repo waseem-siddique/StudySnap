@@ -4,6 +4,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Background from '../components/Background';
 import Logo from '../components/Logo';
+import { API_BASE_URL } from '../config';
 
 export default function ProfessorLogin() {
   const [email, setEmail] = useState('');
@@ -18,8 +19,8 @@ export default function ProfessorLogin() {
     setLoading(true);
     setError('');
     try {
-      const res = await axios.post('http://localhost:5000/api/auth/professor/login', { email, password });
-      login(res.data.token); // only token – user fetched automatically
+      const res = await axios.post(`${API_BASE_URL}/auth/professor/login`, { email, password });
+      login(res.data.token);
       navigate('/professor/dashboard');
     } catch (err) {
       setError(err.response?.data?.error || 'Login failed');

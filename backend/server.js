@@ -55,10 +55,12 @@ app.get('/', (req, res) => {
   res.send('StudySnap API is running...');
 });
 
-// Catch-all: serve frontend's index.html for any non-API route (client‑side routing)
-app.get('/*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../frontend/dist/index.html'));
-});
+// For production: serve frontend for any non‑API route
+if (process.env.NODE_ENV === 'production') {
+  app.get('/:path(.*)', (req, res) => {
+    res.sendFile(path.join(__dirname, '../frontend/dist/index.html'));
+  });
+}
 
 // Start server
 app.listen(PORT, '0.0.0.0', () => {
