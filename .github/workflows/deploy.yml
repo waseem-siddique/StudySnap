@@ -1,0 +1,4 @@
+- name: Fix permissions
+run: | 
+      chmod a+x bin/*
+      git commit -am "Add Permission"
