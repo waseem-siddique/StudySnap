@@ -3,6 +3,10 @@ const User = require('../models/User');
 const Professor = require('../models/Professor');
 const Admin = require('../models/Admin');
 const jwt = require('jsonwebtoken');
+const { sendOTPEmail } = require('../utils/emailService');
+
+// In-memory OTP store (email -> { otp, expires })
+const otpStore = new Map();
 
 // ---------- Student OTP ----------
 router.post('/request-otp', async (req, res) => {
@@ -66,17 +70,55 @@ router.post('/verify-otp', async (req, res) => {
   }
 });
 
-// ---------- Professor ----------
-router.post('/professor/register', async (req, res) => {
+// ---------- Professor OTP Request ----------
+router.post('/professor/request-otp', async (req, res) => {
   try {
-    const { name, email, password, college, courses } = req.body;
-    if (!name || !email || !password || !college) {
-      return res.status(400).json({ error: 'All fields are required' });
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
     }
 
+    // Check if email already exists
     const existing = await Professor.findOne({ email });
     if (existing) {
-      return res.status(400).json({ error: 'Professor already registered' });
+      return res.status(400).json({ error: 'Email already registered' });
+    }
+
+    // Generate 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expires = Date.now() + 10 * 60 * 1000; // 10 minutes
+
+    // Store OTP
+    otpStore.set(email, { otp, expires });
+
+    // Send email
+    await sendOTPEmail(email, otp);
+
+    res.json({ message: 'OTP sent to your email' });
+  } catch (err) {
+    console.error('❌ Error sending OTP:', err);
+    res.status(500).json({ error: 'Failed to send OTP' });
+  }
+});
+
+// ---------- Professor Registration (with OTP) ----------
+router.post('/professor/register', async (req, res) => {
+  try {
+    const { name, email, password, college, courses, otp } = req.body;
+    if (!name || !email || !password || !college || !otp) {
+      return res.status(400).json({ error: 'All fields and OTP are required' });
+    }
+
+    // Verify OTP
+    const stored = otpStore.get(email);
+    if (!stored || stored.otp !== otp || stored.expires < Date.now()) {
+      return res.status(400).json({ error: 'Invalid or expired OTP' });
+    }
+
+    // Final duplicate check (in case registration happened between OTP request and now)
+    const existing = await Professor.findOne({ email });
+    if (existing) {
+      return res.status(400).json({ error: 'Email already registered' });
     }
 
     const professor = new Professor({
@@ -89,13 +131,18 @@ router.post('/professor/register', async (req, res) => {
     });
 
     await professor.save();
+
+    // Clear OTP
+    otpStore.delete(email);
+
     res.status(201).json({ message: 'Registration successful. Await admin approval.' });
   } catch (err) {
-    console.error(err);
+    console.error('❌ Professor registration error:', err);
     res.status(500).json({ error: 'Server error during registration' });
   }
 });
 
+// ---------- Professor Login ----------
 router.post('/professor/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -139,7 +186,7 @@ router.post('/professor/login', async (req, res) => {
   }
 });
 
-// ---------- Admin ----------
+// ---------- Admin Login ----------
 router.post('/admin/login', async (req, res) => {
   try {
     const { email, password } = req.body;

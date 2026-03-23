@@ -136,7 +136,7 @@ export default function Dashboard() {
       disabled: false,
     },
     {
-      title: 'Quizzes',
+      title: 'Quizzes/Missions',
       description: 'Test your knowledge and earn tokens',
       icon: '📝',
       color: 'from-green-500 to-emerald-500',
@@ -304,7 +304,7 @@ export default function Dashboard() {
                 <Logo />
                 <div className="hidden md:flex space-x-4">
                   <Link to="/dashboard" className="text-white/90 hover:text-white px-3 py-2">Home</Link>
-                  <Link to="/quiz" className="text-white/90 hover:text-white px-3 py-2">Quiz</Link>
+                  <Link to="/quiz" className="text-white/90 hover:text-white px-3 py-2">Quiz/Missions</Link>
                   <Link to="/library" className="text-white/90 hover:text-white px-3 py-2">Library</Link>
                   <Link to="/videos" className="text-white/90 hover:text-white px-3 py-2">Videos</Link>
                   <Link to="/connect" className="text-white/90 hover:text-white px-3 py-2">Connect</Link>

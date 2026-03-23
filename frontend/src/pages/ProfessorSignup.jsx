@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Link, useNavigate } from 'react-router-dom';
+import { API_BASE_URL } from '../config';
 import Background from '../components/Background';
 import Logo from '../components/Logo';
-import { API_BASE_URL } from '../config';
 
 export default function ProfessorSignup() {
+  const [step, setStep] = useState(1); // 1: email, 2: otp & details
+  const [email, setEmail] = useState('');
+  const [otp, setOtp] = useState('');
   const [formData, setFormData] = useState({
     name: '',
-    email: '',
     password: '',
     confirmPassword: '',
     college: '',
@@ -19,10 +21,7 @@ export default function ProfessorSignup() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [passwordStrength, setPasswordStrength] = useState({
-    score: 0,
-    feedback: ''
-  });
+  const [passwordStrength, setPasswordStrength] = useState({ score: 0, feedback: '' });
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -43,7 +42,6 @@ export default function ProfessorSignup() {
       setColleges(res.data);
     } catch (err) {
       console.error('Failed to fetch colleges', err);
-      setError('Could not load colleges. Please try again later.');
     }
   };
 
@@ -53,7 +51,6 @@ export default function ProfessorSignup() {
       setCourses(res.data);
     } catch (err) {
       console.error('Failed to fetch courses', err);
-      setError('Could not load courses for selected college.');
     }
   };
 
@@ -67,18 +64,10 @@ export default function ProfessorSignup() {
     if (password.length < minLength) {
       return { valid: false, message: `Password must be at least ${minLength} characters` };
     }
-    if (!hasUpperCase) {
-      return { valid: false, message: 'Must contain at least one uppercase letter' };
-    }
-    if (!hasLowerCase) {
-      return { valid: false, message: 'Must contain at least one lowercase letter' };
-    }
-    if (!hasNumbers) {
-      return { valid: false, message: 'Must contain at least one number' };
-    }
-    if (!hasSpecial) {
-      return { valid: false, message: 'Must contain at least one special character' };
-    }
+    if (!hasUpperCase) return { valid: false, message: 'Must contain at least one uppercase letter' };
+    if (!hasLowerCase) return { valid: false, message: 'Must contain at least one lowercase letter' };
+    if (!hasNumbers) return { valid: false, message: 'Must contain at least one number' };
+    if (!hasSpecial) return { valid: false, message: 'Must contain at least one special character' };
     return { valid: true, message: 'Strong password' };
   };
 
@@ -94,18 +83,34 @@ export default function ProfessorSignup() {
   };
 
   const handleCourseChange = (e) => {
-    const selectedOptions = Array.from(e.target.selectedOptions, option => option.value);
-    setFormData(prev => ({ ...prev, courses: selectedOptions }));
+    const selected = Array.from(e.target.selectedOptions, opt => opt.value);
+    setFormData(prev => ({ ...prev, courses: selected }));
+  };
+
+  const requestOtp = async (e) => {
+    e.preventDefault();
+    if (!email) {
+      setError('Please enter your email');
+      return;
+    }
+    setLoading(true);
+    setError('');
+    try {
+      await axios.post(`${API_BASE_URL}/auth/professor/request-otp`, { email });
+      setStep(2);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to send OTP');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
     if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match');
       return;
     }
-
     const passwordCheck = validatePassword(formData.password);
     if (!passwordCheck.valid) {
       setError(passwordCheck.message);
@@ -118,15 +123,16 @@ export default function ProfessorSignup() {
     try {
       await axios.post(`${API_BASE_URL}/auth/professor/register`, {
         name: formData.name,
-        email: formData.email,
+        email,
         password: formData.password,
         college: formData.college,
-        courses: formData.courses
+        courses: formData.courses,
+        otp
       });
       setSuccess('Registration successful! Await admin approval.');
       setTimeout(() => navigate('/login'), 3000);
     } catch (err) {
-      setError(err.response?.data?.error || 'Registration failed. Please try again.');
+      setError(err.response?.data?.error || 'Registration failed');
     } finally {
       setLoading(false);
     }
@@ -144,108 +150,142 @@ export default function ProfessorSignup() {
           {error && <div className="bg-red-500/20 text-red-200 p-2 rounded mb-4">{error}</div>}
           {success && <div className="bg-green-500/20 text-green-200 p-2 rounded mb-4">{success}</div>}
 
-          <form onSubmit={handleSubmit}>
-            <div className="mb-4">
-              <label className="block text-white mb-1">Full Name</label>
-              <input
-                type="text"
-                name="name"
-                value={formData.name}
-                onChange={handleChange}
-                className="w-full p-2 bg-white/20 border border-white/30 rounded text-white"
-                required
-              />
-            </div>
-            <div className="mb-4">
-              <label className="block text-white mb-1">Email</label>
-              <input
-                type="email"
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                className="w-full p-2 bg-white/20 border border-white/30 rounded text-white"
-                required
-              />
-            </div>
-            <div className="mb-4">
-              <label className="block text-white mb-1">Password</label>
-              <input
-                type="password"
-                name="password"
-                value={formData.password}
-                onChange={handleChange}
-                className="w-full p-2 bg-white/20 border border-white/30 rounded text-white"
-                required
-              />
-              <p className={`text-xs mt-1 ${passwordStrength.score === 100 ? 'text-green-300' : 'text-yellow-300'}`}>
-                {passwordStrength.feedback}
+          {step === 1 ? (
+            // Step 1: Email only
+            <form onSubmit={requestOtp}>
+              <div className="mb-4">
+                <label className="block text-white mb-1">Email Address</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full p-2 bg-white/20 border border-white/30 rounded text-white"
+                  required
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-purple-600 text-white py-2 rounded hover:bg-purple-700 disabled:opacity-50"
+              >
+                {loading ? 'Sending OTP...' : 'Send OTP'}
+              </button>
+              <p className="mt-4 text-white/70 text-center">
+                Already have an account? <Link to="/login" className="text-purple-300 hover:text-purple-200">Login here</Link>
               </p>
-            </div>
-            <div className="mb-4">
-              <label className="block text-white mb-1">Confirm Password</label>
-              <input
-                type="password"
-                name="confirmPassword"
-                value={formData.confirmPassword}
-                onChange={handleChange}
-                className="w-full p-2 bg-white/20 border border-white/30 rounded text-white"
-                required
-              />
-            </div>
-            <div className="mb-4">
-              <label className="block text-white mb-1">College</label>
-              <select
-                name="college"
-                value={formData.college}
-                onChange={handleChange}
-                className="w-full p-2 bg-white/20 border border-white/30 rounded text-white"
-                required
+            </form>
+          ) : (
+            // Step 2: OTP + all details
+            <form onSubmit={handleSubmit}>
+              <div className="mb-4">
+                <label className="block text-white mb-1">Email (verified)</label>
+                <input
+                  type="email"
+                  value={email}
+                  disabled
+                  className="w-full p-2 bg-white/10 border border-white/30 rounded text-white/70 cursor-not-allowed"
+                />
+              </div>
+              <div className="mb-4">
+                <label className="block text-white mb-1">OTP</label>
+                <input
+                  type="text"
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value)}
+                  placeholder="Enter 6-digit OTP"
+                  className="w-full p-2 bg-white/20 border border-white/30 rounded text-white"
+                  required
+                />
+              </div>
+              <div className="mb-4">
+                <label className="block text-white mb-1">Full Name</label>
+                <input
+                  type="text"
+                  name="name"
+                  value={formData.name}
+                  onChange={handleChange}
+                  className="w-full p-2 bg-white/20 border border-white/30 rounded text-white"
+                  required
+                />
+              </div>
+              <div className="mb-4">
+                <label className="block text-white mb-1">Password</label>
+                <input
+                  type="password"
+                  name="password"
+                  value={formData.password}
+                  onChange={handleChange}
+                  className="w-full p-2 bg-white/20 border border-white/30 rounded text-white"
+                  required
+                />
+                <p className={`text-xs mt-1 ${passwordStrength.score === 100 ? 'text-green-300' : 'text-yellow-300'}`}>
+                  {passwordStrength.feedback}
+                </p>
+              </div>
+              <div className="mb-4">
+                <label className="block text-white mb-1">Confirm Password</label>
+                <input
+                  type="password"
+                  name="confirmPassword"
+                  value={formData.confirmPassword}
+                  onChange={handleChange}
+                  className="w-full p-2 bg-white/20 border border-white/30 rounded text-white"
+                  required
+                />
+              </div>
+              <div className="mb-4">
+                <label className="block text-white mb-1">College</label>
+                <select
+                  name="college"
+                  value={formData.college}
+                  onChange={handleChange}
+                  className="w-full p-2 bg-white/20 border border-white/30 rounded text-white"
+                  required
+                >
+                  <option value="">Select College</option>
+                  {colleges.map(col => (
+                    <option key={col._id} value={col._id} className="bg-gray-800 text-white">{col.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="mb-6">
+                <label className="block text-white mb-1">Courses (you can select multiple)</label>
+                <select
+                  multiple
+                  name="courses"
+                  value={formData.courses}
+                  onChange={handleCourseChange}
+                  className="w-full p-2 bg-white/20 border border-white/30 rounded text-white h-32"
+                  disabled={!formData.college || courses.length === 0}
+                >
+                  {courses.length === 0 ? (
+                    <option disabled>No courses available</option>
+                  ) : (
+                    courses.map(c => (
+                      <option key={c._id} value={c._id} className="bg-gray-800 text-white">
+                        {c.name} ({c.code})
+                      </option>
+                    ))
+                  )}
+                </select>
+                <p className="text-xs text-white/50 mt-1">Hold Ctrl (Cmd on Mac) to select multiple</p>
+              </div>
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-purple-600 text-white py-2 rounded hover:bg-purple-700 disabled:opacity-50"
               >
-                <option value="" className="bg-gray-800 text-white">Select College</option>
-                {colleges.map(col => (
-                  <option key={col._id} value={col._id} className="bg-gray-800 text-white">{col.name}</option>
-                ))}
-              </select>
-            </div>
-            <div className="mb-6">
-              <label className="block text-white mb-1">Courses (you can select multiple)</label>
-              <select
-                multiple
-                name="courses"
-                value={formData.courses}
-                onChange={handleCourseChange}
-                className="w-full p-2 bg-white/20 border border-white/30 rounded text-white h-32"
-                disabled={!formData.college || courses.length === 0}
+                {loading ? 'Submitting...' : 'Register'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setStep(1)}
+                className="mt-2 w-full bg-white/10 text-white py-2 rounded hover:bg-white/20"
               >
-                {courses.length === 0 ? (
-                  <option disabled className="bg-gray-800 text-white">
-                    {!formData.college ? 'Select a college first' : 'No courses available'}
-                  </option>
-                ) : (
-                  courses.map(c => (
-                    <option key={c._id} value={c._id} className="bg-gray-800 text-white">
-                      {c.name} ({c.code})
-                    </option>
-                  ))
-                )}
-              </select>
-              <p className="text-xs text-white/50 mt-1">Hold Ctrl (Cmd on Mac) to select multiple</p>
-            </div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-purple-600 text-white py-2 rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? 'Submitting...' : 'Register'}
-            </button>
-          </form>
-
-          <p className="mt-4 text-white/70 text-center">
-            Already have an account?{' '}
-            <Link to="/login" className="text-purple-300 hover:text-purple-200">
-              Login here
-            </Link>
-          </p>
+                ← Back to email
+              </button>
+            </form>
+          )}
         </div>
       </div>
     </Background>
